@@ -1,71 +1,39 @@
-class Unlinked < Requirement
-  fatal true
-
-  satisfy(:build_env => false) { !core_proj_linked }
-
-  def core_proj_linked
-    Formula["proj"].linked_keg.exist?
-  rescue
-    return false
-  end
-
-  def message
-    s = "\033[31mYou have other linked versions!\e[0m\n\n"
-
-    s += "Unlink with \e[32mbrew unlink proj\e[0m or remove with \e[32mbrew uninstall --ignore-dependencies proj\e[0m\n\n" if core_proj_linked
-    s
-  end
-end
-
 class OsgeoProj < Formula
   desc "Cartographic Projections Library"
   homepage "https://proj.org/"
-  url "https://github.com/OSGeo/PROJ/releases/download/6.3.2/proj-6.3.2.tar.gz"
-  sha256 "cb776a70f40c35579ae4ba04fb4a388c1d1ce025a1df6171350dc19f25b80311"
+  url "https://download.osgeo.org/proj/proj-9.7.0.tar.gz"
+  sha256 "65705ecd987b50bf63e15820ce6bd17c042feaabda981249831bd230f6689709"
+  license "MIT"
 
   bottle do
     root_url "https://bottle.download.osgeo.org"
-    sha256 "729a8816d46c6f3293951bf7f68d6b6e32bb13e4c75f339a29140f44b5ffa2e7" => :catalina
-    sha256 "729a8816d46c6f3293951bf7f68d6b6e32bb13e4c75f339a29140f44b5ffa2e7" => :mojave
-    sha256 "729a8816d46c6f3293951bf7f68d6b6e32bb13e4c75f339a29140f44b5ffa2e7" => :high_sierra
+    rebuild 1
+    sha256 cellar: :any, ventura: "PLACEHOLDER"
+    sha256 cellar: :any, monterey: "PLACEHOLDER"
+    sha256 cellar: :any, sonoma: "PLACEHOLDER"
   end
 
-  # revision 1
-
-  # keg_only "proj is already provided by homebrew/core"
-  # we will verify that other versions are not linked
-  depends_on Unlinked
-
   head do
-    url "https://github.com/OSGeo/PROJ.git", :branch => "master"
+    url "https://github.com/OSGeo/PROJ.git", branch: "master"
     depends_on "autoconf" => :build
     depends_on "automake" => :build
     depends_on "libtool" => :build
   end
 
+  depends_on "cmake" => :build
   depends_on "pkg-config" => :build
-  # depends_on "libtiff" Proj >7
+  depends_on "libtiff"
+  depends_on "sqlite"
 
-  conflicts_with "blast", :because => "both install a `libproj.a` library"
-
-  skip_clean :la
-
-  # The datum grid files are required to support datum shifting Proj <7
-  # TODO: If needed, include content from https://github.com/OSGeo/PROJ-data
-  #resource "projdata" do
-  resource "datumgrid" do
-    url "https://download.osgeo.org/proj/proj-datumgrid-1.8.zip"
-    sha256 "b9838ae7e5f27ee732fb0bfed618f85b36e8bb56d7afb287d506338e9f33861e"
-  end
+  conflicts_with "proj", because: "both install the same binaries"
+  conflicts_with "blast", because: "both install a `libproj.a` library"
 
   def install
-    #(buildpath).install resource("projdata")
-    (buildpath/"nad").install resource("datumgrid")
-
-    system "./autogen.sh" if build.head?
-    system "./configure", "--disable-dependency-tracking",
-                          "--prefix=#{prefix}"
-    system "make", "install"
+    # PROJ 7+ uses CMake instead of autotools
+    system "cmake", "-S", ".", "-B", "build", *std_cmake_args,
+                    "-DCMAKE_INSTALL_RPATH=#{rpath}"
+    system "cmake", "--build", "build"
+    system "cmake", "--install", "build"
   end
 
   test do

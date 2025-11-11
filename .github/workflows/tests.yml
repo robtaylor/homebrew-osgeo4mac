@@ -1,0 +1,56 @@
+name: brew test-bot
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: "${{ github.ref }}"
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test-bot:
+    strategy:
+      matrix:
+        os:
+          - macos-13  # Ventura
+          - macos-14  # Sonoma (ARM64)
+          - macos-12  # Monterey
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 240
+    env:
+      HOMEBREW_COLOR: 1
+      HOMEBREW_DEVELOPER: 1
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_FROM_API: 1
+    steps:
+      - name: Set up Homebrew
+        id: set-up-homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+
+      - name: Cache Homebrew Bundler RubyGems
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.set-up-homebrew.outputs.gems-path }}
+          key: ${{ matrix.os }}-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
+          restore-keys: ${{ matrix.os }}-rubygems-
+
+      - run: brew test-bot --only-cleanup-before
+
+      - run: brew test-bot --only-setup
+
+      - name: Run brew test-bot --only-formulae
+        run: |
+          brew test-bot --only-formulae --skip-dependents
+        if: github.event_name == 'pull_request'
+
+      - name: Upload bottles as artifact
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bottles-${{ matrix.os }}
+          path: '*.bottle.*'
+          if-no-files-found: ignore

@@ -1,9 +1,8 @@
 # Supported Xcode Versions
-# https://circleci.com/docs/2.0/testing-ios/
-# 10.15 - 11.3.0 - Catalina
-# 10.14 - 11.1.0 - Mojave
-# 10.13 - 10.1.0 - HS
-# 10.12 - 9.0.1  - Sierra
+# https://circleci.com/docs/using-macos
+# 14.x - 15.1.0 - Sonoma
+# 13.x - 14.3.1 - Ventura
+# 12.x - 14.2.0 - Monterey
 
 build_steps: &build_steps
   steps:
@@ -11,9 +10,9 @@ build_steps: &build_steps
        name: Homebrew config
        command: |
          brew --version
-         brew remove $(brew list)
-         rm -rf /usr/local/Homebrew/Library/Taps/
-         brew update-reset
+         brew remove $(brew list) || true
+         rm -rf /usr/local/Homebrew/Library/Taps/ || true
+         brew update
          brew --env
          brew config
     - checkout
@@ -68,49 +67,44 @@ version: 2
 jobs:
   update-homebrew:
     macos:
-      xcode: "10.1.0"
+      xcode: "14.3.1"
     steps:
       - restore_cache:
           keys:
-            - homebrew-v1-{{ .Branch }}-{{ .Revision }}
-            - homebrew-v1-{{ .Branch }}-
-            - homebrew-v1-
+            - homebrew-v2-{{ .Branch }}-{{ .Revision }}
+            - homebrew-v2-{{ .Branch }}-
+            - homebrew-v2-
       - run:
           name: "Update homebrew"
           command: |
-            brew update-reset
+            brew update
       - save_cache:
-          key: homebrew-v1-{{ .Branch }}-{{ .Revision }}
+          key: homebrew-v2-{{ .Branch }}-{{ .Revision }}
           paths:
             - /usr/local/Homebrew/Library/Taps/homebrew
+            - /opt/homebrew/Library/Taps/homebrew
 
-  # catalina-build:
-  #   <<: *build_steps
-  #   <<: *filter
-  #   macos:
-  #     xcode: "11.3.0"
-
-  # mojave-build:
-  #   <<: *build_steps
-  #   <<: *filter
-  #   macos:
-  #     xcode: "11.1.0"
-
-  high_sierra-build:
+  ventura-build:
     <<: *build_steps
     <<: *filter
     macos:
-      xcode: "10.1.0"
+      xcode: "14.3.1"
 
-  # sierra-build:
-  #   <<: *build_steps
-  #   <<: *filter
-  #   macos:
-  #     xcode: "9.0.1"
+  monterey-build:
+    <<: *build_steps
+    <<: *filter
+    macos:
+      xcode: "14.2.0"
+
+  sonoma-build:
+    <<: *build_steps
+    <<: *filter
+    macos:
+      xcode: "15.1.0"
 
   collect-bottles:
     macos:
-      xcode: "10.1.0"
+      xcode: "14.3.1"
     steps:
       - attach_workspace:
           at: /tmp/workspace
@@ -145,24 +139,6 @@ jobs:
           path: /tmp/workspace/bottles
           destination: bottles
 
-  # deploy:
-  #   macos:
-  #     xcode: "10.1.0"
-  #   steps:
-  #     - checkout
-  #     - run:
-  #         name: Deploy - Upload to bintray
-  #         command: |
-  #           cd /tmp/workspace/bottles
-  #           brew install jfrog-cli-go
-  #           jfrog bt config --user=${BINTRAY_USER} --key=${BINTRAY_API} --licenses=MIT
-  #           echo "jfrog" > jfrog-deploy.txt
-  #           jfrog bt upload --publish=true "jfrog-deploy.txt" homebrew-osgeo/osgeo-bottles/bottles/0.1/
-  #           # jfrog bt upload --publish=true "/tmp/workspace/bottles/*" homebrew-osgeo/osgeo-bottles/bottles/0.1/
-  #     - store_artifacts:
-  #         path: /tmp/workspace/bottles
-  #         destination: bottles
-
 workflows:
   version: 2
   build-deploy:
@@ -175,13 +151,7 @@ workflows:
               only:
                 - bottles
                 - /^(?!pull\/).*$/
-      # - catalina-build:
-      #     requires:
-      #       - update-homebrew
-      # - mojave-build:
-      #     requires:
-      #       - update-homebrew
-      - high_sierra-build:
+      - ventura-build:
           requires:
             - update-homebrew
           filters:
@@ -191,14 +161,9 @@ workflows:
               only:
                 - bottles
                 - /^(?!pull\/).*$/
-      # - sierra-build:
-      #     requires:
-      #       - update-homebrew
-      - collect-bottles:
-            # - catalina-build
-            # - mojave-build
+      - monterey-build:
           requires:
-            - high_sierra-build
+            - update-homebrew
           filters:
             branches:
               ignore:
@@ -206,10 +171,25 @@ workflows:
               only:
                 - bottles
                 - /^(?!pull\/).*$/
-            # - sierra-build
-      # - deploy:
-      #     requires:
-      #       - collect-bottles
-      #     filters:
-      #       branches:
-      #         only: master
+      - sonoma-build:
+          requires:
+            - update-homebrew
+          filters:
+            branches:
+              ignore:
+                - master
+              only:
+                - bottles
+                - /^(?!pull\/).*$/
+      - collect-bottles:
+          requires:
+            - ventura-build
+            - monterey-build
+            - sonoma-build
+          filters:
+            branches:
+              ignore:
+                - master
+              only:
+                - bottles
+                - /^(?!pull\/).*$/

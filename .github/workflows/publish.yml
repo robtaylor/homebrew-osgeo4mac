@@ -1,0 +1,31 @@
+name: Publish bottles
+
+on:
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: Pull request number
+        required: true
+
+env:
+  HOMEBREW_COLOR: 1
+  HOMEBREW_DEVELOPER: 1
+
+jobs:
+  publish:
+    runs-on: macos-13
+    steps:
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+
+      - name: Download bottles from GitHub Actions
+        env:
+          HOMEBREW_GITHUB_API_TOKEN: ${{ github.token }}
+          PULL_REQUEST: ${{ github.event.inputs.pull_request }}
+        run: |
+          brew pr-pull --workflows=tests.yml --artifact-pattern='bottles-*' "$PULL_REQUEST"
+
+      - name: Push commits
+        uses: Homebrew/actions/git-try-push@master
+        with:
+          token: ${{ github.token }}

@@ -54,23 +54,22 @@ for f in ${CHANGED_FORMULAE};do
   echo "${f} dependencies:"
   echo "${deps}"
 
-  # Install XQuartz
+  # Install XQuartz (brew install --cask for modern Homebrew)
   if [ "$(echo ${deps} | grep -c 'osgeo-grass')" != "0" ] || [ "$(echo ${deps} | grep -c 'osgeo-openscenegraph')" != "0" ];then
     echo "one of the dependencies requires XQuartz, installing..."
-    brew cask install xquartz
+    brew install --cask xquartz
   fi
   if [ "${f}" == "osgeo-grass" ] || [ "${f}" == "osgeo-openscenegraph" ];then
     echo "${f} require of XQuartz, installing..."
-    brew cask install xquartz
+    brew install --cask xquartz
   fi
 
   if [ "$(echo ${deps} | grep -c '[python|python]')" != "0" ];then
     echo "Installing and configuring Homebrew Python 3"
-    brew reinstall python
+    brew list python@3.12 || brew install python@3.12
 
     echo "Link Python 3"
-    # which python3
-    brew unlink python && brew link --overwrite --force python
+    brew unlink python@3.12 && brew link --overwrite python@3.12 || true
 
     # ls -l /usr/local/bin/python*
     # rm /usr/local/bin/python*
@@ -87,20 +86,27 @@ for f in ${CHANGED_FORMULAE};do
 
     # Set up Python .pth files
     # get python short version (major.minor)
-    PY_VER=$(/usr/local/opt/python/bin/python3 -c 'import sys;print("{0}.{1}".format(sys.version_info[0],sys.version_info[1]))')
+    PY_VER=$(python3 -c 'import sys;print("{0}.{1}".format(sys.version_info[0],sys.version_info[1]))')
     if [ -n "${DEBUG_CI}" ];then
-      echo $PY_VER
+      echo "Python version: $PY_VER"
     fi
     mkdir -p ${CIRCLE_WORKING_DIRECTORY}/Library/Python/${PY_VER}/lib/python/site-packages
 
-    echo 'import site; site.addsitedir("/usr/local/lib/python${PY_VER}/site-packages")' \
+    # Modern Homebrew Python paths (support both Intel and Apple Silicon)
+    if [ -d "/opt/homebrew" ]; then
+      BREW_PREFIX="/opt/homebrew"
+    else
+      BREW_PREFIX="/usr/local"
+    fi
+
+    echo 'import site; site.addsitedir("'${BREW_PREFIX}'/lib/python'${PY_VER}'/site-packages")' \
          >> ${CIRCLE_WORKING_DIRECTORY}/Library/Python/${PY_VER}/lib/python/site-packages/homebrew.pth
-    echo 'import site; site.addsitedir("/usr/local/opt/osgeo-gdal/lib/python${PY_VER}/site-packages")' \
-         >> ${CIRCLE_WORKING_DIRECTORY}/Library/Python/${PY_VER}/lib/python/site-packages/gdal2.pth
+    echo 'import site; site.addsitedir("'${BREW_PREFIX}'/opt/osgeo-gdal/lib/python'${PY_VER}'/site-packages")' \
+         >> ${CIRCLE_WORKING_DIRECTORY}/Library/Python/${PY_VER}/lib/python/site-packages/gdal.pth
 
     if [[ "${f}" =~ "osgeo-gdal" ]];then
-      echo "Installing GDAL 2 Python 3 dependencies"
-      /usr/local/opt/python/bin/pip3 install numpy
+      echo "Installing GDAL Python 3 dependencies"
+      python3 -m pip install numpy
     fi
   fi
 
